@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta charset="UTF-8" />
+		<meta
+			content="Validate, Verify and Reformat your YAML documents, optimized for Ruby on Rails"
+			name="description"
+		/>
+		<title>YAMLlint - The YAML Validator</title>
+		<link rel="stylesheet" media="all" href="./lta.css" data-turbolinks-track="true" />
+		<script src="https://code.jquery.com/jquery-1.12.4.min.js"></script>
+		<script src="./packed.js"></script>
+		<script src="./lta.js"></script>
+	</head>
+	<body style="font-family: Helvetica">
+		<div id="wrapper" style="width: 920px; margin: auto">
+			<div id="main_content" style="float: left; width: 780px">
+				<h1>YAML Lint</h1>
+				<p>
+					Paste in your YAML and click "Go" - we'll tell you if it's valid or not, and give you a
+					nice clean UTF-8 version of it.
+				</p>
+
+				<textarea
+					name="yaml"
+					id="yaml"
+					rows="20"
+					class="lined"
+					style="background-color: #eeeeee; width: 100%"
+					oninput="yamlChanged()"
+				></textarea>
+				<button type="button" onclick="parseYaml()">Go</button>
+				<input type="checkbox" id="reformat" name="reformat" checked="checked" />
+				<label for="reformat"> Reformat (strips comments)</label>
+				<input type="checkbox" id="resolve_aliases" name="resolve_aliases" checked="checked" />
+				<label id="resolve_aliases_label" for="resolve_aliases"> Resolve aliases</label><br />
+
+				<div id="result" style="color: white; width: 100%; padding: 10px"></div>
+
+				<script>
+					$('#reformat').change(function () {
+						// disable resolve aliases if reformat is not checked
+						$('#resolve_aliases').prop('disabled', !$('#reformat').is(':checked'));
+						$('#reformat').is(':checked')
+							? $('#resolve_aliases_label').removeClass('disabled')
+							: $('#resolve_aliases_label').addClass('disabled');
+					});
+
+					function yamlChanged() {
+						$('#result').css('background-color', '').text('');
+						return;
+					}
+
+					function selectLines(arr) {
+						$('.codelines .lineno.lineselect').removeClass('lineselect');
+						if (arr.length < 1 || arr[0] < 1) return false;
+						for (const line of arr) {
+							$('.codelines .lineno')
+								.eq(line - 1)
+								.addClass('lineselect');
+						}
+					}
+
+					function getErrors(doc) {
+						var lines = [];
+						var messages = [];
+
+						if (doc.errors.length > 0) {
+							error_line = doc.errors[0].linePos[0].line;
+							error_msg = doc.errors[0].message.split(':\n')[0];
+
+							doc.errors.forEach((e, i) => {
+								messages.push(e.message.split(':\n')[0]);
+								lines.push(e.linePos[0].line);
+							});
+						}
+						return [lines, messages];
+					}
+
+					var YAML = require('yaml');
+					function parseYaml() {
+						var reformat = $('#reformat').is(':checked');
+						var resolve_aliases = $('#resolve_aliases').is(':checked');
+						var lines = [];
+						var messages = [];
+
+						// check for input
+						if ($('#yaml').val().length <= 0) {
+							$('#result').css('background-color', '').text('');
+							return;
+						}
+
+						// check for multiple documents
+						var x = YAML.parseDocument($('#yaml').val(), { merge: true });
+						if (x.errors.length > 0 && x.errors.some((e) => e.code == 'MULTIPLE_DOCS')) {
+							var arr = YAML.parseAllDocuments($('#yaml').val(), {
+								merge: true,
+							});
+
+							for (const doc of arr) {
+								var e = getErrors(doc);
+								lines = lines.concat(e[0]);
+								messages = messages.concat(e[1]);
+							}
+							selectLines(lines);
+							if (lines.length != 0) {
+								$('#result')
+									.css('background-color', 'red')
+									.html('Multiple documents detected - ' + messages.join('<br/>'));
+							} else {
+								$('#result')
+									.css('background-color', 'green')
+									.text('Multiple documents detected - Valid YAML!');
+								if ($('#reformat').is(':checked')) {
+									var docStrings = arr.map(function (x) {
+										return YAML.stringify(x.toJS(), {
+											aliasDuplicateObjects: !resolve_aliases,
+											directives: true,
+										});
+									});
+									$('#yaml').val(docStrings.join('\n'));
+								}
+							}
+						} else {
+							var e = getErrors(x);
+							lines = lines.concat(e[0]);
+							messages = messages.concat(e[1]);
+							selectLines(lines);
+							if (lines.length > 0) {
+								$('#result').css('background-color', 'red').html(messages.join('<br/>'));
+							} else {
+								if ($('#yaml').val().length > 0) {
+									$('#result').css('background-color', 'green').text('Valid YAML!');
+									if ($('#reformat').is(':checked')) {
+										var t = YAML.stringify(x.toJS(), {
+											aliasDuplicateObjects: !resolve_aliases,
+											directives: true,
+										});
+										$('#yaml').val(t);
+									}
+								}
+							}
+						}
+					}
+					$(function () {
+						// Target all classed with ".lined"
+						$('.lined').linedtextarea({ selectedLine: null });
+					});
+				</script>
+			</div>
+			<div style="clear: both"></div>
+		</div>
+	</body>
+</html>
